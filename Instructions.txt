@@ -20,3 +20,11 @@ Run the update command
 
 To reset the OS logical volume to the last snapshot and reboot:
 Run the rollback command
+
+To switch from KVM to VirtualBox:
+Run the switchtovbox command
+
+To switch from Vbox to KVM:
+Run the switchtokvm command
+
+
