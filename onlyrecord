@@ -1,4 +1,6 @@
 #!/bin/bash
+# Test script to help optimize record settings
+
 
 VDIR='/home/grant/Videos'		# Base directory for videos
 VFILE="${VDIR}/test.avi"		# Video container type: for pcm lossless audio container needs to be avi or mkv
@@ -22,13 +24,6 @@ if [[ -z "$VRES" ]] ;then
 	VRES=$(xrandr | awk '/\*/{print $1}') 
 fi
 
-
-#ffmpeg -y -f x11grab -s $RES -r $FPS -i :0.0 -f alsa -i sysdefault:CARD=USBPre2 -ar 48000 -ac 1 -c:v libx264 -qp 0 -crf 0 -tune stillimage -r $FPS -preset:v ultrafast $VFILE
-
-# lossless audio in avi container. Cannot use mp4 container!
-#ffmpeg -f alsa -i sysdefault:CARD=USBPre2 -ar 48000 -ac 1 -acodec pcm_s16le audio.avi
-
-# 
 ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1"  -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -preset:v "$VPRESET"  "$VFILE"
  
 
