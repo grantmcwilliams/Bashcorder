@@ -1,22 +1,3 @@
-To install:
+Bashcorder is a tool that uses bash, ffmpeg and zenity to provide screen cap recording functionality. 
+It has no interface and is started from a hotkey. When a second hotkey is pressed it stops the recording and prompts the user to save it.
 
-In order to have rollback snapshots of the recording machine we need to use LVM.
-For CentOS 7
-
-Edit the rc.local file to match the root logical volume name. 
-Append rc.local to the /etc/rc.d/rc.local file
-Rename this directory so it's hidden and doesn't show up in an ls
-Add this directory to the system $PATH
-Assign a keyboard shortcut in Gnome to start bashcorder
-Assign a keyboard shortcut in Gnome to send a killall -USR1 to bashcorder
-Once all base OS configuration is done run updatesnap
-
-To Record:
-Press first keyboard shortcut to record
-Press second keyboard shortcut to save
-
-To update the OS drive configuration into a snapshop:
-Run the update command
-
-To reset the OS logical volume to the last snapshot and reboot:
-Run the rollback command
