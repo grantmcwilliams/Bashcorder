@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if lvs | grep -q zrootsnap ; then
+	lvconvert --merge studio/zrootsnap
+	reboot
+else
+	echo "Root snapshot doesn't exist - exiting"
+fi 

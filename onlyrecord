@@ -1,0 +1,39 @@
+#!/bin/bash
+
+VDIR='/home/grant/Videos'		# Base directory for videos
+VFILE="${VDIR}/test.avi"		# Video container type: for pcm lossless audio container needs to be avi or mkv
+QUEUE='1024'	     			# gets rid of ALSA xruns	
+ACHANNELS='2' 					# audio channels: 1 = mono, 2 = stereo
+ARATE='48000'	     			# audio sample rate
+ACODEC='pcm_s16le'   			# audio codec: lossless 16 bit 
+ADEV='sysdefault:CARD=USBPre2' 	# audio device: location name of ALSA device
+ATYPE='alsa'					# audio device type: alsa recording - could be jack or pulse
+VFPS='15'             			# frames per second
+#VRES='1680x1050'      			# video resolution: comment out for auto
+VSCREEN=':0.0'					# video screen
+VCODEC='libx264'				# video encoder
+VTYPE='x11grab'					# video grab type
+VPRESET='ultrafast'   			# video encoder: ultrafast = large files, 
+VTUNE='stillimage'				# video tune: film, animation, grain, stillimage, psnr, ssim, fastdecode, zerolatency -  x264 --fullhelp
+VQUAL='0'  						# video quality: 0 = lossless, 16 = indistinguishable
+VKEYFRAMES='90'					# keyframe interval (frames)
+
+if [[ -z "$VRES" ]] ;then
+	VRES=$(xrandr | awk '/\*/{print $1}') 
+fi
+
+
+#ffmpeg -y -f x11grab -s $RES -r $FPS -i :0.0 -f alsa -i sysdefault:CARD=USBPre2 -ar 48000 -ac 1 -c:v libx264 -qp 0 -crf 0 -tune stillimage -r $FPS -preset:v ultrafast $VFILE
+
+# lossless audio in avi container. Cannot use mp4 container!
+#ffmpeg -f alsa -i sysdefault:CARD=USBPre2 -ar 48000 -ac 1 -acodec pcm_s16le audio.avi
+
+# 
+ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1"  -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -preset:v "$VPRESET"  "$VFILE"
+ 
+
+
+#re-encode with the best quality
+# ffmpeg -i "$FILE" -c:v libx264 -preset veryslow -crf 0  -acodec copy "${FILE%.*}2.avi"
+# ffmpeg -i "$FILE" -c:v libx264 -preset veryslow -crf 12 "${FILE%.*}2.avi"
+

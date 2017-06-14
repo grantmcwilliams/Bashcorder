@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Edit these settings 
+ROOTVG='studio'
+ROOTLV='root'
+SNAP='zrootsnap' 
+
+# Do not edit below this line
+
+ROOTDEV="/dev/${ROOTVG}/${ROOTLV}"
+
+if lvs | grep -q "${SNAP}" ; then
+	lvremove "${ROOTVG}/${SNAP}"
+fi 
+
+lvcreate -l 100%FREE --snapshot --name "$SNAP" "$ROOTDEV"
+
+

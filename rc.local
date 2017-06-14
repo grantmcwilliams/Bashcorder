@@ -1,0 +1,18 @@
+
+# 1. Append these lines to the rc.local
+# 2. Make rc.local executable - chmod 754 /etc/rc.d/rc.local
+
+# Edit these settings to match the Volume Group and Logical Volume names
+# of the recording host.
+ 
+ROOTVG='studio'		# Root FS Volume Group name
+ROOTLV='root'		# Root FS Logical Volume name
+SNAP='zrootsnap'  	# Starts with 'z', last in list - easier to edit in post
+
+
+# Do not edit below this line
+ROOTDEV="/dev/${ROOTVG}/${ROOTLV}"
+if ! lvs | grep -p "$SNAP" &> /dev/null ; then
+	lvcreate -l 100%FREE --snapshot --name "$SNAP" "$ROOTDEV"
+fi
+
