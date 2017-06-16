@@ -12,13 +12,10 @@ if [[ $EUID != 0 ]] ;then
 	exit 1
 fi
 
-
-ROOTDEV="/dev/${ROOTVG}/${ROOTLV}"
-
 if lvs | grep -q "${SNAP}" ; then
-	lvremove "${ROOTVG}/${SNAP}"
+	lvconvert --merge "${ROOTVG}/${SNAP}"
+	reboot
+else
+	echo "Root snapshot doesn't exist - exiting"
 fi 
-
-lvcreate -l 100%FREE --snapshot --name "$SNAP" "$ROOTDEV"
-
 
