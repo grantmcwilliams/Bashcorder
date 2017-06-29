@@ -5,36 +5,52 @@ cleanup()
 	if pgrep ffmpeg &> /dev/null ;then
 		killall ffmpeg
 	fi
+
+	if [[ "$RAMREC" = 'true' ]] ;then
+		if [[ -d "/dev/shm/${APPNAME}" ]] ;then
+			rm -Rf "/dev/shm/${APPNAME}"
+		fi
+	else
+		rm -f "$VTMPFILE"	
+	fi
 	exit
 }
 trap 'cleanup' SIGINT SIGTERM
 
+# Locations
 APPNAME=${0##*/}
-CONFDIR="${HOME}/.${APPNAME}"		# Application config directory
-CONFFILE="${CONFDIR}/settings.conf"	# Application config file
-DEPLIST="vlc ffmpeg zenity xrandr"  # Application dependencies - these must be installed!
-VDIR="${HOME}/Videos"		       	# Base directory for videos
-VTMPFILE="${VDIR}/${APPNAME}.avi"  	# Video file: for pcm lossless audio container needs to be avi or mkv
-QUEUE='1024'                    	# Audio and Video thread queue size - gets rid of ALSA xruns        
-ACHANNELS='2'                   	# Audio channels: 1 = mono, 2 = stereo
-ARATE='48000'                   	# Audio sample rate
-ACODEC='pcm_s16le'             	 	# Audio codec: lossless 16 bit 
-ADEV='sysdefault:CARD=USBPre2'  	# Audio device: location name of ALSA device
-ATYPE='alsa'                    	# Audio device type: alsa recording - could be jack or pulse
-VFPS='15'                       	# Video frames per second
-VRES='auto'             			# Video resolution: either resolution 1680x1050 or 'auto'
-VSCREEN=':0.0'                  	# Video screen
-VCODEC='libx264'                	# Video encoder
-VFCODEC='libx264'					# Video final encoder
-VTYPE='x11grab'                 	# Video grab type
-VPRESET='ultrafast'             	# Video preset: ultrafast = large files, 
-VFPRESET='veryslow'             	# Video final preset: very slow = smaller files, 
-VTUNE='stillimage'              	# Video tune: film, animation, grain, stillimage, fastdecode, zerolatency
-									# To see all video tune settings run x264 --fullhelp
-VQUAL='0'                       	# Video quality: 0 = lossless, 12 = indistinguishable
-VFQUAL='0'                       	# Video final quality: 0 = lossless, 12 = indistinguishable
-VKEYFRAMES='90'                 	# Video keyframe interval (frames)
+CONFDIR="${HOME}/.${APPNAME}"		
+CONFFILE="${CONFDIR}/settings.conf"	
+LOGFILE="${CONFDIR}/${APPNAME}.log"
+DEPLIST="vlc ffmpeg zenity xrandr"  
+VDIR="${HOME}/Videos"		       	
 
+# Do not edit - to override edit ${CONFDIR}/settings.conf"
+QUEUE='1024'                    	        
+ACHANNELS='2'                   	
+ARATE='48000'                   	
+ACODEC='pcm_s16le'             	 	 
+ADEV='sysdefault:CARD=USBPre2'  	
+ATYPE='alsa'                    
+VFPS='15'                       	
+VRES='auto'             			
+VSCREEN=':0.0'                 
+VCODEC='libx264'                	
+VFCODEC='libx264'					
+VTYPE='x11grab'                
+VPRESET='ultrafast'             	 
+VFPRESET='veryslow'             	 
+VTUNE='stillimage'
+VQUAL='0'                       	
+VFQUAL='0'                 
+VKEYFRAMES='90'           
+
+log()
+{
+	local MSG="$1"
+	echo "$(date '+%b %d %H:%M:%S') ${HOSTNAME} ${APPNAME}: $MSG" >> "$LOGFILE"
+
+}
 
 setup()
 {
@@ -51,21 +67,33 @@ setup()
 		fi
 	done
 
+	# Source the settings.conf file
 	if [[ -e "$CONFFILE" ]] ;then
 		source "$CONFFILE"
-	else
-		touch "$CONFFILE"
 	fi
 
 	if [[ "$VRES" = 'auto' ]] ;then   
 		VRES=$(xrandr | awk '/\*/{print $1}')
 	fi
+	
+	VTMPFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
+	if [[ "$RAMREC" = 'true' ]] ;then
+		if mount | grep -q '/dev/shm' ;then 
+			if [[ ! -d "/dev/shm/${APPNAME}" ]] ;then
+				mkdir -p "/dev/shm/${APPNAME}"
+			fi
+			VDIR="/dev/shm/${APPNAME}"
+			VTMPFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
+		else
+			log "/dev/shm not active - using $VDIR"
+		fi
+	fi
 }
+
 
 savefile()
 {
-	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save --confirm-overwrite \
-	--title="Save as" 2>/dev/null)
+	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" 2>/dev/null)
 	case $? in
         -1) echo "An unexpected error has occurred."; return 1;;
 	esac
@@ -102,48 +130,54 @@ stoprecord()
 
 trap 'stoprecord' USR1
 
+# Name the video according to it's type
 movevideo(){
 	local SRC="$1"
 	local DEST="$2"
-	if [[ "$SRC" = "$DEST" ]];then
-
-		zenity --question --title="" --text "Is this a pickup or retake" --ok-label="Pickup" \ 
-		--cancel-label="Retake" 2> /dev/null
-		case $? in
-    		0) OP='pickup';;
-    		1) OP='retake' ;;
-    		-1) echo "An unexpected error has occurred." ; return 1;;
-		esac
-		EXT=${DEST##*.}
-		NOEXT=${DEST%.*}
-		if [[ "$OP" = 'retake' ]] ;then
-			if [[ "$NOEXT" =~ .*tk.* ]] ;then
-				TAKE=${NOEXT##*_}
-				NOTAKE=${NOEXT%_*} 
-				TAKENUM=${TAKE//[[:alpha:]]}
-				(( TAKENUM++ ))
-				DEST="${NOTAKE}_tk${TAKENUM}.${EXT}"
-			else
-				DEST="${NOTAKE}_tk1.${EXT}"
-			fi
-		fi  
-		if [[ "$OP" = 'pickup' ]] ;then
-            if [[ "$NOEXT" =~ .*PU.* ]] ;then
-                PU=${NOEXT##*_}
-                NOPU=${NOEXT%_*}
-                PUNUM=${PU//[[:alpha:]]}
-                (( PUNUM++ ))
-                DEST="${NOPU}_PU${PUNUM}.${EXT}"
-            else
-                DEST="${NOPU}_PU1.${EXT}"
-            fi
-        fi  
-
-
+	if [[ -f "$DEST" ]];then
+		zenity --question --title="" --text "File exists - overwrite?" --ok-label="Yes" 
+		--cancel-label="No" 2> /dev/null
+		if [[ "$?" -eq '1' ]] ;then
+			zenity --question --title="" --text "Is this a pickup or retake" --ok-label="Pickup" \ 
+			--cancel-label="Retake" 2> /dev/null
+			case $? in
+    			0) OP='pickup';;
+    			1) OP='retake' ;;
+    			-1) echo "An unexpected error has occurred." ; return 1;;
+			esac
+			EXT="${DEST##*.}"
+			REST="${DEST%.*}"
+			if [[ "$OP" = 'retake' ]] ;then
+				if [[ "$REST" =~ .*[tT][kK].* ]] ;then
+					TAKE=${REST##*_}
+					REST=${REST%_*} 
+					TAKENUM=${TAKE//[[:alpha:]]}
+					(( TAKENUM++ ))
+					DEST="${REST}_tk${TAKENUM}.${EXT}"
+				else
+					DEST="${REST}_tk1.${EXT}"
+				fi
+			fi  
+			if [[ "$OP" = 'pickup' ]] ;then
+            	if [[ "${REST}" =~ .*[pP][uU].* ]] ;then
+                	PU="${REST##*_}"
+                	REST="${REST%_*}"
+                	PUNUM="${PU//[[:alpha:]]}"
+                	(( PUNUM++ ))
+                	DEST="${REST}_PU${PUNUM}.${EXT}"
+            	else
+                	DEST="${REST}_PU1.${EXT}"
+            	fi
+        	fi  
+		fi
 	fi
-	if ! mv "$SRC" "$DEST" ;then
+	if ! OUT=$(mv -f "$SRC" "$DEST") ;then
     	zenity --error --title="${APPNAME^}" --text="Unable to move $SRC to $DEST - exiting" 2>/dev/null
+		log "Warning: Unable to move $SRC to $DEST"
+		log "$OUT"
 		return 1
+	else
+		log "Moved $SRC to $DEST"
 	fi
 }
 
@@ -161,10 +195,10 @@ startrecord()
 	fi
 
 	(
-		echo "25" ; sleep 1
-        echo "50" ; sleep 1
-        echo "75" ; sleep 1
-        echo "100" ; sleep 1
+		echo "#Recording in 4" ;echo "25" ; sleep 1
+        echo "#Recording in 3" ;echo "50" ; sleep 1
+        echo "#Recording in 2" ;echo "75" ; sleep 1
+        echo "#Recording in 1" ;echo "100" ; sleep 1
 	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording" --percentage=0 2>/dev/null
 	
 	if [[ "$?" -eq '1' ]] ; then
@@ -172,6 +206,7 @@ startrecord()
        	return 1
 	else
 		RECORDING='true'
+		log "Starting new recording"
 		ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
 	    -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
 	    -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
@@ -187,13 +222,41 @@ encodevideo()
 {
 	local VIDFILE="$1"
 	if zenity --title="${APPNAME^}" --question --text="Reencode the video? (Y/N)" 2>/dev/null ;then
-		ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \ 
-		-x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" "${VIDFILE%.*}.avi"
+	
+		log "Re-encoding ${VIDFILE} to vcodec:${VFCODEC} preset:${VFPRESET} crf:${VFQUAL} acodec:copy"
+		local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
+			 -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
+		
+		if [[ -f "${VIDFILE%.*}-enc.avi" ]] ;then
+			rm -f "${VIDFILE%.*}-enc.avi"
+		fi
+	
+		ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \
+			-x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "$VDIR/progress.txt" \ 
+			"${VIDFILE%.*}-tmp.avi" &
+		FFPID=$!
+
+		PERCENT="0"
+		(
+			while [ -e "/proc/${FFPID}" ]; do
+				FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${VDIR}/progress.txt" | awk 'END{print $2}')
+				if [[ "${FRAME}" -gt "${TOTAL}" ]]; then               
+		            FRAME="${TOTAL}"
+        		fi
+				PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+				echo "#Encoding frame: $FRAME"
+				echo "$PERCENT"
+			done 
+			sleep 2
+    	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+		mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE"
     fi
 }
 
 setup
+
 if ! startrecord ; then
+	log "Warning: Unable to start recording"
 	exit 1
 fi
 
