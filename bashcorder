@@ -19,11 +19,11 @@ trap 'cleanup' SIGINT SIGTERM
 
 # Locations
 APPNAME=${0##*/}
-CONFDIR="${HOME}/.${APPNAME}"		
+CONFDIR="${HOME}/.bashcorder"		
 CONFFILE="${CONFDIR}/settings.conf"	
 LOGFILE="${CONFDIR}/${APPNAME}.log"
 DEPLIST="vlc ffmpeg zenity xrandr"  
-VDIR="${HOME}/Videos"		       	
+VDIR="${HOME}/Videos"		  
 
 # Do not edit - to override edit ${CONFDIR}/settings.conf"
 QUEUE='1024'                    	        
@@ -90,7 +90,6 @@ setup()
 	fi
 }
 
-
 savefile()
 {
 	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" 2>/dev/null)
@@ -105,18 +104,14 @@ savefile()
 			echo "PREVDIR=\"${SAVENAME%/*}/\"" >> "$CONFFILE"
 		fi
 	else
-		zenity --question --text="Delete video? (Y/N)" 2>/dev/null
-		case $? in
-        	0) rm -f "$VTMPFILE" ; return ;;
-         	1) return 1 ;;
-        	-1) echo "An unexpected error has occurred." ; return 1;;
-		esac
+		if deletevideo "$VTMPFILE" ; then
+			return
+		fi
 	fi
-	if ! movevideo "$VTMPFILE" "$SAVENAME" ;then
+	playvideo "$VTMPFILE"
+	if ! movevideo "$VTM PFILE" "$SAVENAME" ;then
 		return 1
 	fi
-	playvideo "$SAVENAME"
-	encodevideo "$SAVENAME" 
 }
 
 stoprecord()
@@ -184,7 +179,8 @@ movevideo(){
 playvideo(){
 	local VIDFILE="$1"
 	if zenity --title="${APPNAME^}" --question --text="Do you want to view the video? (Y/N)" 2>/dev/null ;then
-       	vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
+    	log "Viewing $VIDFILE"
+	   	vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
 	fi
 }
 
@@ -218,48 +214,9 @@ startrecord()
 	fi
 }
 
-encodevideo()
-{
-	local VIDFILE="$1"
-	if zenity --title="${APPNAME^}" --question --text="Reencode the video? (Y/N)" 2>/dev/null ;then
-	
-		log "Re-encoding ${VIDFILE} to vcodec:${VFCODEC} preset:${VFPRESET} crf:${VFQUAL} acodec:copy"
-		local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
-			 -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
-		
-		if [[ -f "${VIDFILE%.*}-enc.avi" ]] ;then
-			rm -f "${VIDFILE%.*}-enc.avi"
-		fi
-	
-		ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \
-			-x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "$VDIR/progress.txt" \ 
-			"${VIDFILE%.*}-tmp.avi" &
-		FFPID=$!
-
-		PERCENT="0"
-		(
-			while [ -e "/proc/${FFPID}" ]; do
-				FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${VDIR}/progress.txt" | awk 'END{print $2}')
-				if [[ "${FRAME}" -gt "${TOTAL}" ]]; then               
-		            FRAME="${TOTAL}"
-        		fi
-				PERCENT="$(( (FRAME * 100) /  TOTAL ))"
-				echo "#Encoding frame: $FRAME"
-				echo "$PERCENT"
-			done 
-			sleep 2
-    	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
-		mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE"
-    fi
-}
-
 setup
 
 if ! startrecord ; then
 	log "Warning: Unable to start recording"
 	exit 1
 fi
-
-
-
-

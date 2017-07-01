@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# Locations
+APPNAME=${0##*/}
+CONFDIR="${HOME}/.bashcorder"
+CONFFILE="${CONFDIR}/settings.conf"\
+ENCFILE="${CONFDIR}/encoded.log"
+LOGFILE="${CONFDIR}/${APPNAME}.log"
+DEPLIST="ffmpeg zenity"
+TMPDIR=$(mktemp -d)
+
+setup()
+{
+    for PROG in $DEPLIST ;do
+        if ! which "$PROG" &> /dev/null ;then
+            zenity --error --title="${APPNAME^}" --text="$PROG not installed - exiting" 2>/dev/null
+            exit 1
+        fi
+    done
+
+    # Source the settings.conf file
+    if [[ -e "$CONFFILE" ]] ;then
+        source "$CONFFILE"
+    fi
+}
+
+encodevideo()
+{
+    local VIDFILE="$1"
+    local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
+         -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
+
+    if [[ -f "${VIDFILE%.*}-enc.avi" ]] ;then
+    	rm -f "${VIDFILE%.*}-enc.avi"
+    fi
+
+    ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \
+            -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${VIDFILE%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
+    FFPID=$!
+
+	touch "${TMPDIR}/progress.txt"
+    PERCENT="0"
+    (
+    	while [ -e "/proc/${FFPID}" ]; do
+        	FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${TMPDIR}/progress.txt" | awk 'END{print $2}')
+        	if [[ "${FRAME}" -gt "${TOTAL}" ]]; then
+        		FRAME="${TOTAL}"
+        	fi
+        	PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+        	echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
+        	echo "$PERCENT"
+       	done
+        sleep 2
+	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+    mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE"
+	echo "$VIDFILE" >> "$ENCFILE"
+	rm -Rf "${TMPDIR}"
+}
+
+setup
+
+if [[ -z "$1" ]] ;then
+	echo "Must provide video files to encode"
+	exit 1
+fi
+
+
+for FILE in $(find "$@" -type f -iname *${VIDTYPE}) ;do
+	if ! grep $FILE $ENCFILE ;then
+		encodevideo "$FILE"
+	fi
+done
+
+
+
