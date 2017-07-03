@@ -3,7 +3,7 @@
 # Locations
 APPNAME=${0##*/}
 CONFDIR="${HOME}/.bashcorder"
-CONFFILE="${CONFDIR}/settings.conf"\
+CONFFILE="${CONFDIR}/settings.conf"
 ENCFILE="${CONFDIR}/encoded.log"
 LOGFILE="${CONFDIR}/${APPNAME}.log"
 DEPLIST="ffmpeg zenity"
@@ -22,6 +22,10 @@ setup()
     if [[ -e "$CONFFILE" ]] ;then
         source "$CONFFILE"
     fi
+
+	if [[ -f "$ENCFILE" ]] ;then
+		touch "$ENCFILE"
+	fi
 }
 
 encodevideo()
@@ -51,7 +55,7 @@ encodevideo()
         	echo "$PERCENT"
        	done
         sleep 2
-	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
     mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE"
 	echo "$VIDFILE" >> "$ENCFILE"
 	rm -Rf "${TMPDIR}"
@@ -65,7 +69,7 @@ if [[ -z "$1" ]] ;then
 fi
 
 
-for FILE in $(find "$@" -type f -iname *${VIDTYPE}) ;do
+for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
 	if ! grep $FILE $ENCFILE ;then
 		encodevideo "$FILE"
 	fi

@@ -11,7 +11,7 @@ cleanup()
 			rm -Rf "/dev/shm/${APPNAME}"
 		fi
 	else
-		rm -f "$VTMPFILE"	
+		rm -f "${VTMPFILE}"	
 	fi
 	exit
 }
@@ -26,6 +26,7 @@ DEPLIST="vlc ffmpeg zenity xrandr"
 VDIR="${HOME}/Videos"		  
 
 # Do not edit - to override edit ${CONFDIR}/settings.conf"
+TIMER='5'
 QUEUE='1024'                    	        
 ACHANNELS='2'                   	
 ARATE='48000'                   	
@@ -44,6 +45,19 @@ VTUNE='stillimage'
 VQUAL='0'                       	
 VFQUAL='0'                 
 VKEYFRAMES='90'           
+
+# Ensure only one copy runs at a time
+
+LOCKFILE="${CONFDIR}/lockfile"
+LOCKFD='99'
+exlock()			{ flock -xn  $LOCKFD; }
+no_more_locking() 	{ flock -u $LOCKFD; flock -xn $LOCKFD && rm -r "$LOCKFILE"; }
+prepare_locking()	{ eval "exec $LOCKFD>\"$LOCKFILE\""; trap no_more_locking EXIT;}
+
+prepare_locking 
+
+exlock || exit 1
+
 
 log()
 {
@@ -90,12 +104,26 @@ setup()
 	fi
 }
 
+deletevideo()
+{
+	local VIDEO="$1"
+	zenity --question --title="${APPNAME^}" --text "Do you want to delete this video? " --ok-label="Yes" \ 
+       --cancel-label="No" 2> /dev/null
+    case $? in
+    	0) OP='pickup';;
+        1) OP='retake' ;;
+        -1) echo "An unexpected error has occurred." ; return 1;;
+    esac
+	rm -f "$VIDEO"
+}
+
 savefile()
 {
-	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" 2>/dev/null)
+	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='AVI files (*.avi) | *.avi' --file-filter='All Files | *' 2>/dev/null)
 	case $? in
         -1) echo "An unexpected error has occurred."; return 1;;
 	esac
+
 
 	if [[ ! -z "$SAVENAME" ]] ;then
 		if grep -q 'PREVDIR' "$CONFFILE" ;then
@@ -104,12 +132,12 @@ savefile()
 			echo "PREVDIR=\"${SAVENAME%/*}/\"" >> "$CONFFILE"
 		fi
 	else
-		if deletevideo "$VTMPFILE" ; then
-			return
+		if deletevideo "${VTMPFILE}" ; then
+			return 
 		fi
 	fi
-	playvideo "$VTMPFILE"
-	if ! movevideo "$VTM PFILE" "$SAVENAME" ;then
+	playvideo "${VTMPFILE}"
+	if ! movevideo "${VTMPFILE}" "${SAVENAME}" ;then
 		return 1
 	fi
 }
@@ -120,7 +148,8 @@ stoprecord()
 		kill -INT "$FFPID"
 	fi
 	RECORDING='false'
-	savefile 
+	savefile
+	exit 
 }
 
 trap 'stoprecord' USR1
@@ -130,10 +159,10 @@ movevideo(){
 	local SRC="$1"
 	local DEST="$2"
 	if [[ -f "$DEST" ]];then
-		zenity --question --title="" --text "File exists - overwrite?" --ok-label="Yes" 
+		zenity --question --title="${APPNAME^}" --text "File exists - overwrite?" --ok-label="Yes" 
 		--cancel-label="No" 2> /dev/null
 		if [[ "$?" -eq '1' ]] ;then
-			zenity --question --title="" --text "Is this a pickup or retake" --ok-label="Pickup" \ 
+			zenity --question --title="${APPNAME^}" --text "Is this a pickup or retake" --ok-label="Pickup" \ 
 			--cancel-label="Retake" 2> /dev/null
 			case $? in
     			0) OP='pickup';;
@@ -178,7 +207,7 @@ movevideo(){
 
 playvideo(){
 	local VIDFILE="$1"
-	if zenity --title="${APPNAME^}" --question --text="Do you want to view the video? (Y/N)" 2>/dev/null ;then
+	if zenity --title="${APPNAME^}" --question --text="Do you want to view the video?" 2>/dev/null ;then
     	log "Viewing $VIDFILE"
 	   	vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
 	fi
@@ -186,19 +215,19 @@ playvideo(){
 
 startrecord()
 {
-	if [[ -f "$VTMPFILE" ]] ;then
-		rm -f "$VTMPFILE"
+	if [[ -f "${VTMPFILE}" ]] ;then
+		rm -f "${VTMPFILE}"
 	fi
 
 	(
-		echo "#Recording in 4" ;echo "25" ; sleep 1
-        echo "#Recording in 3" ;echo "50" ; sleep 1
-        echo "#Recording in 2" ;echo "75" ; sleep 1
-        echo "#Recording in 1" ;echo "100" ; sleep 1
-	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording" --percentage=0 2>/dev/null
+		for i in $(seq "$TIMER" -1 1) ;do
+			echo "#Recording in $i " 
+			sleep 1
+		done
+	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording" --pulsate 2>/dev/null
 	
 	if [[ "$?" -eq '1' ]] ; then
-	   	zenity --error --title="${APPNAME^}" --text="Recording Canceled" 2>/dev/null
+	   	zenity --warning --title="${APPNAME^}" --text="Recording Canceled" 2>/dev/null
        	return 1
 	else
 		RECORDING='true'
@@ -206,7 +235,7 @@ startrecord()
 		ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
 	    -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
 	    -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
-	    -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -preset:v "$VPRESET" "$VTMPFILE" &>/dev/null &	
+	    -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null &	
 	    FFPID="$!"
 	    while [ "$RECORDING" = 'true' ] ; do
 			sleep 1
