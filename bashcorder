@@ -22,7 +22,7 @@ APPNAME=${0##*/}
 CONFDIR="${HOME}/.bashcorder"		
 CONFFILE="${CONFDIR}/settings.conf"	
 LOGFILE="${CONFDIR}/${APPNAME}.log"
-DEPLIST="vlc ffmpeg zenity xrandr"  
+DEPLIST="vlc ffmpeg zenity xrandr flock"  
 VDIR="${HOME}/Videos"		  
 
 # Do not edit - to override edit ${CONFDIR}/settings.conf"
@@ -51,11 +51,13 @@ VKEYFRAMES='90'
 LOCKFILE="${CONFDIR}/lockfile"
 LOCKFD='99'
 exlock()			{ flock -xn  $LOCKFD; }
+unlock()			{ flock -u $LOCKFD; }
 no_more_locking() 	{ flock -u $LOCKFD; flock -xn $LOCKFD && rm -r "$LOCKFILE"; }
 prepare_locking()	{ eval "exec $LOCKFD>\"$LOCKFILE\""; trap no_more_locking EXIT;}
 
-prepare_locking 
 
+
+prepare_locking 
 exlock || exit 1
 
 
