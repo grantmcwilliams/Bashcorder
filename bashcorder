@@ -138,10 +138,10 @@ savefile()
 			return 
 		fi
 	fi
-	playvideo "${VTMPFILE}"
 	if ! movevideo "${VTMPFILE}" "${SAVENAME}" ;then
 		return 1
 	fi
+	playvideo "${SAVENAME}"
 }
 
 stoprecord()
