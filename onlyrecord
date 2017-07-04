@@ -1,6 +1,8 @@
 #!/bin/bash
 # Test script to help optimize record settings and troubleshoot recording - output goes to the shell
 
+APPNAME="${0##*/}"
+
 cleanup()
 {
     if pgrep ffmpeg &> /dev/null ;then
@@ -8,12 +10,12 @@ cleanup()
     fi
 
     if [[ "$RAMREC" = 'true' ]] ;then
-        if [[ -d "/dev/shm/onlyrecord" ]] ;then
-            mv -f "${VFILE}" "/home/grant/Videos/"
-			rm -Rf "/dev/shm/onlyrecord/"
+        if [[ -d "/dev/shm/${APPNAME}" ]] ;then
+            mv -f "${VFILE}" "${HOME}/Videos/"
+			rm -Rf "/dev/shm/${APPNAME}"
         fi
     fi
-	echo "Recorded video is /home/grant/Videos/onlyrecord.avi"
+	echo "Recorded video is ${HOME}/Videos/${APPNAME}.avi"
     exit
 }
 trap 'cleanup' SIGINT SIGTERM
@@ -36,21 +38,23 @@ VPRESET='ultrafast'   			# video encoder: ultrafast = large files, superfast, ve
 VTUNE='stillimage'				# video tune: film, animation, grain, stillimage, psnr, ssim, fastdecode, zerolatency -  x264 --fullhelp
 VQUAL='0'  						# video quality: 0 = lossless, 16 = indistinguishable
 VKEYFRAMES='90'					# keyframe interval (frames)
+VIDTYPE="avi"                   # Video file type: for pcm lossless audio container needs to be avi or mkv
+
 
 if [[ -z "$VRES" ]] ;then
 	VRES=$(xrandr | awk '/\*/{print $1}') 
 fi
 
-VDIR='/home/grant/Videos'		
-VFILE="${VDIR}/onlyrecord.avi"
+VDIR="${HOME}/Videos"		
+VFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
 
 if [[ "$RAMREC" = 'true' ]] ;then
 	if mount | grep -q '/dev/shm' ;then
-    	if [[ ! -d "/dev/shm/onlyrecord" ]] ;then
-        	mkdir -p "/dev/shm/onlyrecord"
+    	if [[ ! -d "/dev/shm/${APPNAME}" ]] ;then
+        	mkdir -p "/dev/shm/${APPNAME}"
         fi
-        VDIR="/dev/shm/onlyrecord"
-        VFILE="${VDIR}/onlyrecord.avi"
+        VDIR="/dev/shm/${APPNAME}"
+        VFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
     fi
 fi
 
