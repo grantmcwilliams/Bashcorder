@@ -1,9 +1,26 @@
 #!/bin/bash
-# Test script to help optimize record settings
+# Test script to help optimize record settings and troubleshoot recording - output goes to the shell
+
+cleanup()
+{
+    if pgrep ffmpeg &> /dev/null ;then
+        killall ffmpeg
+    fi
+
+    if [[ "$RAMREC" = 'true' ]] ;then
+        if [[ -d "/dev/shm/onlyrecord" ]] ;then
+            mv -f "${VFILE}" "/home/grant/Videos/"
+			rm -Rf "/dev/shm/onlyrecord/"
+        fi
+    fi
+	echo "Recorded video is /home/grant/Videos/onlyrecord.avi"
+    exit
+}
+trap 'cleanup' SIGINT SIGTERM
 
 
-VDIR='/home/grant/Videos'		# Base directory for videos
-VFILE="${VDIR}/test.avi"		# Video container type: for pcm lossless audio container needs to be avi or mkv
+
+RAMREC="false"					# Record to ram
 QUEUE='1024'	     			# gets rid of ALSA xruns	
 ACHANNELS='2' 					# audio channels: 1 = mono, 2 = stereo
 ARATE='48000'	     			# audio sample rate
@@ -15,7 +32,7 @@ VFPS='15'             			# frames per second
 VSCREEN=':0.0'					# video screen
 VCODEC='libx264'				# video encoder
 VTYPE='x11grab'					# video grab type
-VPRESET='ultrafast'   			# video encoder: ultrafast = large files, 
+VPRESET='ultrafast'   			# video encoder: ultrafast = large files, superfast, veryfast, faster, fast, medium, slow, veryslow
 VTUNE='stillimage'				# video tune: film, animation, grain, stillimage, psnr, ssim, fastdecode, zerolatency -  x264 --fullhelp
 VQUAL='0'  						# video quality: 0 = lossless, 16 = indistinguishable
 VKEYFRAMES='90'					# keyframe interval (frames)
@@ -24,11 +41,19 @@ if [[ -z "$VRES" ]] ;then
 	VRES=$(xrandr | awk '/\*/{print $1}') 
 fi
 
+VDIR='/home/grant/Videos'		
+VFILE="${VDIR}/onlyrecord.avi"
+
+if [[ "$RAMREC" = 'true' ]] ;then
+	if mount | grep -q '/dev/shm' ;then
+    	if [[ ! -d "/dev/shm/onlyrecord" ]] ;then
+        	mkdir -p "/dev/shm/onlyrecord"
+        fi
+        VDIR="/dev/shm/onlyrecord"
+        VFILE="${VDIR}/onlyrecord.avi"
+    fi
+fi
+
 ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1"  -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -preset:v "$VPRESET"  "$VFILE"
- 
 
-
-#re-encode with the best quality
-# ffmpeg -i "$FILE" -c:v libx264 -preset veryslow -crf 0  -acodec copy "${FILE%.*}2.avi"
-# ffmpeg -i "$FILE" -c:v libx264 -preset veryslow -crf 12 "${FILE%.*}2.avi"
 
