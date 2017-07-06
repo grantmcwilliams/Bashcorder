@@ -5,9 +5,13 @@ if [[ ! "$EUID" = 0 ]] ;then
 else
 	echo "Stopping VirtualBox services"	
 	systemctl stop vboxdrv.service
+	systemctl disable vboxdrv.service
 	systemctl stop vboxautostart-service.service
+	systemctl disable vboxautostart-service.service
 	systemctl stop vboxballoonctrl-service.service
+	systemctl disable vboxballoonctrl-service.service
 	systemctl stop vboxweb-service.service
+	systemctl disable vboxweb-service.service
 	echo "Loading kvm kernel module"
 	if ! modprobe kvm ;then
 		echo "Warning: Unable to load kvm kernel module"

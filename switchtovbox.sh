@@ -12,8 +12,12 @@ else
 	fi
 	echo "Starting VirtualBox services"
 	systemctl start vboxdrv.service
+	systemctl enable vboxdrv.service
 	systemctl start vboxautostart-service.service
+	systemctl enable vboxautostart-service.service
 	systemctl start vboxballoonctrl-service.service
+	systemctl enable  vboxballoonctrl-service.service
 	systemctl start vboxweb-service.service
+	systemctl enable vboxweb-service.service
 fi
 
