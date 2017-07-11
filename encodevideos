@@ -6,7 +6,7 @@ CONFDIR="${HOME}/.bashcorder"
 CONFFILE="${CONFDIR}/settings.conf"
 ENCFILE="${CONFDIR}/encoded.log"
 LOGFILE="${CONFDIR}/${APPNAME}.log"
-DEPLIST="ffmpeg zenity"
+DEPLIST="ffmpeg zenity md5sum"
 TMPDIR=$(mktemp -d)
 
 setup()
@@ -56,9 +56,13 @@ encodevideo()
        	done
         sleep 2
 	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
-    mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE"
-	echo "$VIDFILE" >> "$ENCFILE"
-	rm -Rf "${TMPDIR}"
+    if mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE" ;then
+		SUM=$(tail -c 1024 "${VIDFILE}" | md5sum | awk '{print $1}')
+		echo "${VIDFILE}:${SUM}" >> "$ENCFILE"
+	else
+            zenity --error --title="${APPNAME^}" --text="Unable to move $VIDFILE - exiting" 2>/dev/null
+            exit 1
+    fi
 }
 
 setup
@@ -70,10 +74,12 @@ fi
 
 
 for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
-	if ! grep $FILE $ENCFILE ;then
+	PRESUM=$(tail -c 1024 "${FILE}" | md5sum | awk '{print $1}')
+	if ! grep "${FILE}:${PRESUM}" "$ENCFILE" ;then
 		encodevideo "$FILE"
 	fi
 done
 
 
+rm -Rf "${TMPDIR}"
 
