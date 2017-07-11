@@ -28,9 +28,16 @@ setup()
 	fi
 }
 
+cleanup()
+{
+	rm -Rf "$TMPDIR"
+	exit
+}
+
 encodevideo()
 {
     local VIDFILE="$1"
+	local COUNT="$2"
     local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
          -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
 
@@ -51,17 +58,39 @@ encodevideo()
         		FRAME="${TOTAL}"
         	fi
         	PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+			echo "#  Encoding file $COUNT of $TOTALFILES"
         	echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
         	echo "$PERCENT"
        	done
         sleep 2
 	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+	if [[ $? -eq 1 ]];then
+        zenity --question --title="${APPNAME^}" --text "Do you want to cancel encoding all videos? " --ok-label="Yes" --cancel-label="No" 2> /dev/null
+        case $? in
+                0) cleanup ;;
+               -1) echo "An unexpected error has occurred." ; return 1;;
+        esac
+        (
+            while [ -e "/proc/${FFPID}" ]; do
+                FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${TMPDIR}/progress.txt" | awk 'END{print $2}')
+                if [[ "${FRAME}" -gt "${TOTAL}" ]]; then
+                    FRAME="${TOTAL}"
+                fi
+                PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+                echo "#  Encoding file $COUNT of $TOTALFILES"
+                echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
+                echo "$PERCENT"
+            done
+            sleep 2
+        ) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+    fi
+    
     if mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE" ;then
 		SUM=$(tail -c 1024 "${VIDFILE}" | md5sum | awk '{print $1}')
 		echo "${VIDFILE}:${SUM}" >> "$ENCFILE"
 	else
             zenity --error --title="${APPNAME^}" --text="Unable to move $VIDFILE - exiting" 2>/dev/null
-            exit 1
+            cleanup
     fi
 }
 
@@ -69,17 +98,19 @@ setup
 
 if [[ -z "$1" ]] ;then
 	echo "Must provide video files to encode"
-	exit 1
+	cleanup
 fi
 
+TOTALFILES="${#@}"
+COUNTER='1'
 
 for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
 	PRESUM=$(tail -c 1024 "${FILE}" | md5sum | awk '{print $1}')
 	if ! grep "${FILE}:${PRESUM}" "$ENCFILE" ;then
-		encodevideo "$FILE"
+		encodevideo "$FILE" "$COUNTER"
 	fi
+	(( COUNTER++ ))
 done
 
-
-rm -Rf "${TMPDIR}"
+cleanup
 
