@@ -30,8 +30,9 @@ setup()
 
 cleanup()
 {
+	local RC="$1"
 	rm -Rf "$TMPDIR"
-	exit
+	exit "$RC"
 }
 
 encodevideo()
@@ -44,12 +45,17 @@ encodevideo()
     if [[ -f "${VIDFILE%.*}-enc.avi" ]] ;then
     	rm -f "${VIDFILE%.*}-enc.avi"
     fi
+	touch "${TMPDIR}/progress.txt"
 
     ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \
-            -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${VIDFILE%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
-    FFPID=$!
+            -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${TMPDIR}/${VIDFILE%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
+    FFRC="$?"
 
-	touch "${TMPDIR}/progress.txt"
+	if [[ ! "$FFRC" -eq '0' ]] ;then 
+		return 1
+	fi
+
+	FFPID="$!"
     PERCENT="0"
     (
     	while [ -e "/proc/${FFPID}" ]; do
@@ -61,13 +67,13 @@ encodevideo()
 			echo "#  Encoding file $COUNT of $TOTALFILES"
         	echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
         	echo "$PERCENT"
+        	sleep 2
        	done
-        sleep 2
 	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
 	if [[ $? -eq 1 ]];then
         zenity --question --title="${APPNAME^}" --text "Do you want to cancel encoding all videos? " --ok-label="Yes" --cancel-label="No" 2> /dev/null
         case $? in
-                0) cleanup ;;
+                0) cleanup 0 ;;
                -1) echo "An unexpected error has occurred." ; return 1;;
         esac
         (
@@ -80,17 +86,17 @@ encodevideo()
                 echo "#  Encoding file $COUNT of $TOTALFILES"
                 echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
                 echo "$PERCENT"
+            	sleep 2
             done
-            sleep 2
         ) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
     fi
     
-    if mv -f "${VIDFILE%.*}-tmp.avi" "$VIDFILE" ;then
+    if mv -f "${TMPDIR}/${VIDFILE%.*}-tmp.avi" "$VIDFILE" ;then
 		SUM=$(tail -c 1024 "${VIDFILE}" | md5sum | awk '{print $1}')
 		echo "${VIDFILE}:${SUM}" >> "$ENCFILE"
 	else
             zenity --error --title="${APPNAME^}" --text="Unable to move $VIDFILE - exiting" 2>/dev/null
-            cleanup
+            return 1
     fi
 }
 
@@ -98,7 +104,7 @@ setup
 
 if [[ -z "$1" ]] ;then
 	echo "Must provide video files to encode"
-	cleanup
+	cleanup 1
 fi
 
 TOTALFILES="${#@}"
@@ -106,11 +112,15 @@ COUNTER='1'
 
 for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
 	PRESUM=$(tail -c 1024 "${FILE}" | md5sum | awk '{print $1}')
-	if ! grep "${FILE}:${PRESUM}" "$ENCFILE" ;then
-		encodevideo "$FILE" "$COUNTER"
+	if ! grep -q "${PRESUM}" "$ENCFILE" ;then
+		if ! encodevideo "$FILE" "$COUNTER" ;then
+			cleanup 1
+		fi
 	fi
 	(( COUNTER++ ))
 done
+
+zenity --info --title="${APPNAME}" --text "Encoding Complete" 2>/dev/null
 
 cleanup
 
