@@ -15,6 +15,13 @@ To Record:
 Press first keyboard shortcut to record
 Press second keyboard shortcut to save
 
+To re-encode recorded videos from the CLI:
+Run encodevideos <Video Files or Directory> 
+
+To re-encode recorded vides from the GUI:
+ln -s ~/.bashcorder/encodevideos ~/.local/share/nautilus/scripts/EncodeVideos
+Right click on Video directory and select scripts/Encodevideos  
+
 To update the OS drive configuration into a snapshop:
 Run the update command
 

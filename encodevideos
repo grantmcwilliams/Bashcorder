@@ -11,9 +11,20 @@ TMPDIR=$(mktemp -d)
 
 setup()
 {
+	PARENT=$(ps --no-headers -o command "$PPID")
+	if [[ "$PARENT" =~ .*bash.* ]] ;then
+    	OUT="text"
+	else
+    	OUT="gui"
+	fi
+
     for PROG in $DEPLIST ;do
         if ! which "$PROG" &> /dev/null ;then
-            zenity --error --title="${APPNAME^}" --text="$PROG not installed - exiting" 2>/dev/null
+			if [[ "$OUT" = 'gui' ]] ;then
+            	zenity --error --title="${APPNAME^}" --text="$PROG not installed - exiting" 2>/dev/null
+			else
+				echo "Error: $PROG not installed - exiting"	
+			fi
             exit 1
         fi
     done
@@ -26,6 +37,7 @@ setup()
 	if [[ -f "$ENCFILE" ]] ;then
 		touch "$ENCFILE"
 	fi
+
 }
 
 cleanup()
@@ -35,9 +47,21 @@ cleanup()
 	exit "$RC"
 }
 
+getframe(){
+	local PROGRESS="$1"
+	local TOTAL="$2"
+	local FRAME=$(grep -a '^frame=.*type=[[:space:]][a-Z]' "${PROGRESS}" | awk 'END{print $2}')
+    if [[ "${FRAME}" -gt "${TOTAL}" ]]; then
+    	FRAME="${TOTAL}"
+    fi
+	echo "$FRAME"
+}
+
+
 encodevideo()
 {
     local VIDFILE="$1"
+	VIDNAME=${VIDFILE##*/}
 	local COUNT="$2"
     local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
          -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
@@ -48,7 +72,7 @@ encodevideo()
 	touch "${TMPDIR}/progress.txt"
 
     ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL" -acodec copy \
-            -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${TMPDIR}/${VIDFILE%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
+            -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${TMPDIR}/${VIDNAME%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
     FFRC="$?"
 
 	if [[ ! "$FFRC" -eq '0' ]] ;then 
@@ -56,61 +80,79 @@ encodevideo()
 	fi
 
 	FFPID="$!"
+	FRAME='0'
     PERCENT="0"
-    (
-    	while [ -e "/proc/${FFPID}" ]; do
-        	FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${TMPDIR}/progress.txt" | awk 'END{print $2}')
-        	if [[ "${FRAME}" -gt "${TOTAL}" ]]; then
-        		FRAME="${TOTAL}"
-        	fi
-        	PERCENT="$(( (FRAME * 100) /  TOTAL ))"
-			echo "#  Encoding file $COUNT of $TOTALFILES"
-        	echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
-        	echo "$PERCENT"
-        	sleep 2
-       	done
-	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
-	if [[ $? -eq 1 ]];then
-        zenity --question --title="${APPNAME^}" --text "Do you want to cancel encoding all videos? " --ok-label="Yes" --cancel-label="No" 2> /dev/null
-        case $? in
-                0) cleanup 0 ;;
-               -1) echo "An unexpected error has occurred." ; return 1;;
-        esac
-        (
-            while [ -e "/proc/${FFPID}" ]; do
-                FRAME=$(grep '^frame=.*type=[[:space:]][a-Z]' "${TMPDIR}/progress.txt" | awk 'END{print $2}')
-                if [[ "${FRAME}" -gt "${TOTAL}" ]]; then
-                    FRAME="${TOTAL}"
-                fi
+	if [[ "$OUT" = 'gui' ]] ;then
+    	(
+    		while [ -e "/proc/${FFPID}" ]; do
+				FRAME=$(getframe "${TMPDIR}/progress.txt" "$TOTAL") 
+        		PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+				echo "#  Encoding file $COUNT of $TOTALFILES"
+        		echo "#  ${VIDFILE} - Encoding frame: $FRAME - ${PERCENT}%"
+        		echo "$PERCENT"
+        		sleep 2
+       		done
+		) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+		if [[ $? -eq 1 ]];then
+        	zenity --question --title="${APPNAME^}" --text "Do you want to cancel encoding all videos? " --ok-label="Yes" --cancel-label="No" 2> /dev/null
+        	case $? in
+            	    0) cleanup 0 ;;
+               		-1) echo "An unexpected error has occurred." ; return 1;;
+        	esac
+        	(
+            	while [ -e "/proc/${FFPID}" ]; do
+					FRAME=$(getframe "${TMPDIR}/progress.txt" "$TOTAL") 
+                	PERCENT="$(( (FRAME * 100) /  TOTAL ))"
+                	echo "#  Encoding file $COUNT of $TOTALFILES"
+                	echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
+                	echo "$PERCENT"
+            		sleep 2
+            	done
+        	) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+    	fi
+	else
+		 while [ -e "/proc/${FFPID}" ]; do
+                FRAME=$(getframe "${TMPDIR}/progress.txt" "$TOTAL") 
+				if [[ -z "$FRAME" ]] ;then
+					FRAME='0'
+				fi
                 PERCENT="$(( (FRAME * 100) /  TOTAL ))"
-                echo "#  Encoding file $COUNT of $TOTALFILES"
-                echo "#  ${VIDFILE} - Encoding frame: $FRAME  "
-                echo "$PERCENT"
-            	sleep 2
-            done
-        ) | zenity --progress --auto-close --width='400' --title="${APPNAME^}" --text="Encoding" --percentage=0 2>/dev/null
+				clear
+				echo "${APPNAME^}"
+				echo "-----------"
+                echo "File: ${VIDFILE} ($COUNT of $TOTALFILES)    Frame: ${FRAME}/${TOTAL}    Done: ${PERCENT}%"
+                sleep 2
+     	done
     fi
-    
-    if mv -f "${TMPDIR}/${VIDFILE%.*}-tmp.avi" "$VIDFILE" ;then
+
+    if mv -f "${TMPDIR}/${VIDNAME%.*}-tmp.avi" "$VIDFILE" ;then
 		SUM=$(tail -c 1024 "${VIDFILE}" | md5sum | awk '{print $1}')
 		echo "${VIDFILE}:${SUM}" >> "$ENCFILE"
 	else
-            zenity --error --title="${APPNAME^}" --text="Unable to move $VIDFILE - exiting" 2>/dev/null
-            return 1
+		if [[ "$OUT" = 'gui' ]]; then
+    		zenity --error --title="${APPNAME^}" --text="Unable to move $VIDFILE - exiting" 2>/dev/null
+		else
+			echo "Error: Unable to move $VIDFILE - exiting"
+		fi
+        return 1
     fi
 }
 
 setup
 
 if [[ -z "$1" ]] ;then
-	echo "Must provide video files to encode"
+	if [[ "$OUT" = 'gui' ]]; then
+    	zenity --error --title="${APPNAME^}" --text="Must provide vide files to encode - exiting" 2>/dev/null
+    else
+		echo "Must provide video files to encode" 
+    fi
 	cleanup 1
 fi
 
 TOTALFILES="${#@}"
 COUNTER='1'
 
-for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
+for FILE in $(find "$@" -type f -iname "*${VIDTYPE}" | sort --version-sort -f) ;do
 	PRESUM=$(tail -c 1024 "${FILE}" | md5sum | awk '{print $1}')
 	if ! grep -q "${PRESUM}" "$ENCFILE" ;then
 		if ! encodevideo "$FILE" "$COUNTER" ;then
@@ -120,7 +162,11 @@ for FILE in $(find "$@" -type f -iname "*${VIDTYPE}") ;do
 	(( COUNTER++ ))
 done
 
-zenity --info --title="${APPNAME}" --text "Encoding Complete" 2>/dev/null
+if [[ "$OUT" = 'gui' ]] ;then
+	zenity --info --title="${APPNAME}" --text "Encoding Complete" 2>/dev/null
+else
+	echo "Encoding Complete"
+fi
 
 cleanup
 
