@@ -23,28 +23,28 @@ The workflow is very simple.
 * Recording can be started and stopped while presentation is running saving editing
 
 
-### To Record:
+#### To Record:
 Press configurable keyboard shortcut to record
 
-### To Save Recording:
+#### To Save Recording:
 Press configurable keyboard shortcut to be prompted with save dialog
 
-### To re-encode recorded videos from the CLI:
+#### To re-encode recorded videos from the CLI:
 Run encodevideos <Video Files or Directory>
 
-### To re-encode recorded vides from the Gnome3 GUI:
+#### To re-encode recorded vides from the Gnome3 GUI:
 ln -s ~/.bashcorder/encodevideos ~/.local/share/nautilus/scripts/EncodeVideos
 Right click on Video directory and select scripts/Encodevideos
 
-### To update the OS drive configuration into a snapshot:
+#### To update the OS drive configuration into a snapshot:
 Run the updatesnap command
 
-### To reset the OS logical volume to the last snapshot and reboot:
+#### To reset the OS logical volume to the last snapshot and reboot:
 Run the rollbacksnap command
 
-### To switch from KVM to VirtualBox:
+#### To switch from KVM to VirtualBox:
 Run the switchtovbox.sh command
 
-### To switch from Vbox to KVM:
+#### To switch from Vbox to KVM:
 Run the switchtokvm.sh command
 
