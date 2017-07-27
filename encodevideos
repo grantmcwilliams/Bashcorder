@@ -8,6 +8,7 @@ ENCFILE="${CONFDIR}/encoded.log"
 LOGFILE="${CONFDIR}/${APPNAME}.log"
 DEPLIST="ffmpeg zenity md5sum"
 TMPDIR=$(mktemp -d)
+MINSPACE='5'
 
 setup()
 {
@@ -37,7 +38,10 @@ setup()
 	if [[ -f "$ENCFILE" ]] ;then
 		touch "$ENCFILE"
 	fi
-
+	declare -a SCREENHEAD
+	declare -a SCREENOUT
+	SCREENHEAD[0]="${APPNAME^}"
+	SCREENHEAD[1]=$(for each in $(seq 1 ${#APPNAME}); do printf "="; done)
 }
 
 cleanup()
@@ -57,14 +61,40 @@ getframe(){
 	echo "$FRAME"
 }
 
+printspaces()
+{
+	# arg 1 - the longest item in the column (integer)
+	# arg 2 - the length of the item ie. ${#VAR} (integer)
+	COLUMN="$1"
+	ITEM="$2"
+	
+	printf "%*s" "$(( $COLUMN + $MINSPACE - $ITEM ))"
+}
+
+#get width of columns
+getcolwidth()
+{
+	#get longest item in array
+	array=( "$@" )
+	i=0
+	LONGEST="0"
+	IFS=$'\n'
+	for ITEM in ${array[@]} ;do
+		if [[ "${#ITEM}" -gt "$LONGEST" ]] ;then
+			LONGEST="${#ITEM}"
+		fi
+	done
+	echo "$LONGEST"
+	
+}
+
 
 encodevideo()
 {
     local VIDFILE="$1"
 	VIDNAME=${VIDFILE##*/}
 	local COUNT="$2"
-    local TOTAL=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames \
-         -of default=nokey=1:noprint_wrappers=1 "$VIDFILE")
+	local TOTAL="$3"
 
     if [[ -f "${VIDFILE%.*}-enc.avi" ]] ;then
     	rm -f "${VIDFILE%.*}-enc.avi"
@@ -117,15 +147,22 @@ encodevideo()
 					FRAME='0'
 				fi
                 PERCENT="$(( (FRAME * 100) /  TOTAL ))"
-				clear
-				echo "${APPNAME^}"
-				echo "-----------"
-                echo "File: ${VIDFILE} ($COUNT of $TOTALFILES)    Frame: ${FRAME}/${TOTAL}    Done: ${PERCENT}%"
+				 
+                SCREENOUT[$COUNT]="File: ${VIDFILE} ($COUNT of $TOTALFILES)    Frame: ${FRAME}/${TOTAL}    Done: ${PERCENT}%"
+	    	    clear
+                for IND in ${!SCREENHEAD[@]} ;do 
+                    echo "${SCREENHEAD[$IND]}"
+                done
+
+                for IND in ${!SCREENOUT[@]} ;do 
+                    echo "${SCREENOUT[$IND]}"
+                done
+	
                 sleep 2
      	done
     fi
-
-    if mv -f "${TMPDIR}/${VIDNAME%.*}-tmp.avi" "$VIDFILE" ;then
+    
+	if mv -f "${TMPDIR}/${VIDNAME%.*}-tmp.avi" "$VIDFILE" ;then
 		SUM=$(tail -c 1024 "${VIDFILE}" | md5sum | awk '{print $1}')
 		echo "${VIDFILE}:${SUM}" >> "$ENCFILE"
 	else
@@ -136,6 +173,7 @@ encodevideo()
 		fi
         return 1
     fi
+	SCREENOUT[$COUNT]="File: ${VIDFILE} ($COUNT of $TOTALFILES)  Done: ${PERCENT}%"
 }
 
 setup
@@ -156,17 +194,24 @@ for FILE in $(find "$@" -type f -iname "*${VIDTYPE}" | sort --version-sort -f) ;
 	PRESUM=$(tail -c 1024 "${FILE}" | md5sum | awk '{print $1}')
 	if ! grep -q "${PRESUM}" "$ENCFILE" ;then
 		ENCFILES+=("$FILE")
+		echo "Getting frame totals for $FILE"
+    	TOTALFRAMES[$COUNTER]=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=nokey=1:noprint_wrappers=1 "$FILE")
+		(( COUNTER++ ))
 	fi
-	(( COUNTER++ ))
 done
+#COLLONGEST[0]=$(getcolwidth "${ENCFILES[@]}")
+#COLLONGEST[1]=$(getcolwidth "${#ENCFILES[@]}")
+#COLLONGEST[2]=$(getcolwidth "${TOTALFRAMES[@]}")
 
 
 TOTALFILES="${#ENCFILES[@]}"
 for i in "${!ENCFILES[@]}" ; do
-	if ! encodevideo "${ENCFILES[$i]}" $(( i + 1 )) ;then
+	plusone=$(( i + 1 ))
+	if ! encodevideo "${ENCFILES[$i]}" $plusone "${TOTALFRAMES[$plusone]}" ;then
 		cleanup 1
 	fi	
 done
+
 
 if [[ "$OUT" = 'gui' ]] ;then
 	zenity --info --title="${APPNAME}" --text "Encoding Complete" 2>/dev/null
@@ -174,5 +219,5 @@ else
 	echo "Encoding Complete"
 fi
 
-cleanup
+cleanup 0
 
