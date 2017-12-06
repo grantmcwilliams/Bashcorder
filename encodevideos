@@ -61,34 +61,6 @@ getframe(){
 	echo "$FRAME"
 }
 
-printspaces()
-{
-	# arg 1 - the longest item in the column (integer)
-	# arg 2 - the length of the item ie. ${#VAR} (integer)
-	COLUMN="$1"
-	ITEM="$2"
-	
-	printf "%*s" "$(( $COLUMN + $MINSPACE - $ITEM ))"
-}
-
-#get width of columns
-getcolwidth()
-{
-	#get longest item in array
-	array=( "$@" )
-	i=0
-	LONGEST="0"
-	IFS=$'\n'
-	for ITEM in ${array[@]} ;do
-		if [[ "${#ITEM}" -gt "$LONGEST" ]] ;then
-			LONGEST="${#ITEM}"
-		fi
-	done
-	echo "$LONGEST"
-	
-}
-
-
 encodevideo()
 {
     local VIDFILE="$1"
