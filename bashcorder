@@ -45,7 +45,8 @@ VTUNE='stillimage'
 VQUAL='0'                       	
 VFQUAL='0'                 
 VKEYFRAMES='90'           
-VPIXFORMAT='yuv420p' 
+VPIXFORMAT='yuv420p'
+RECTYPE='auvid' 
 
 # Ensure only one copy runs at a time
 
@@ -107,10 +108,10 @@ setup()
 	fi
 }
 
-deletevideo()
+deletemedia()
 {
 	local VIDEO="$1"
-	zenity --question --title="${APPNAME^}" --text "Do you want to delete this video? " --ok-label="Yes" \ 
+	zenity --question --title="${APPNAME^}" --text "Do you want to delete this file? " --ok-label="Yes" \ 
        --cancel-label="No" 2> /dev/null
     case $? in
     	0) OP='pickup';;
@@ -122,11 +123,17 @@ deletevideo()
 
 savefile()
 {
-	SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='AVI files (*.avi) | *.avi' --file-filter='All Files | *' 2>/dev/null)
-	case $? in
-        -1) echo "An unexpected error has occurred."; return 1;;
-	esac
-
+	if [[ "$RECTYPE" = 'audio' ]] ;then
+		SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='Audio files (*.wav) | *.wav' --file-filter='All Files | *' 2>/dev/null)
+		case $? in
+        	-1) echo "An unexpected error has occurred."; return 1;;
+		esac
+	elif [[ "$RECTYPE" = 'auvid' ]] ;then 
+		SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='AVI files (*.avi) | *.avi' --file-filter='All Files | *' 2>/dev/null)
+		case $? in
+        	-1) echo "An unexpected error has occurred."; return 1;;
+		esac
+	fi
 
 	if [[ ! -z "$SAVENAME" ]] ;then
 		if grep -q 'PREVDIR' "$CONFFILE" ;then
@@ -135,14 +142,14 @@ savefile()
 			echo "PREVDIR=\"${SAVENAME%/*}/\"" >> "$CONFFILE"
 		fi
 	else
-		if deletevideo "${VTMPFILE}" ; then
+		if deletemedia "${VTMPFILE}" ; then
 			return 
 		fi
 	fi
-	if ! movevideo "${VTMPFILE}" "${SAVENAME}" ;then
+	if ! movemedia "${VTMPFILE}" "${SAVENAME}" ;then
 		return 1
 	fi
-	playvideo "${SAVENAME}"
+	playmedia "${SAVENAME}"
 }
 
 stoprecord()
@@ -151,14 +158,18 @@ stoprecord()
 		kill -INT "$FFPID"
 	fi
 	RECORDING='false'
-	savefile
+	if [[ "$RECTYPE" = 'audio' ]] ;then
+		savefile -a
+	else
+		savefile -v
+	fi
 	exit 
 }
 
 trap 'stoprecord' USR1
 
-# Name the video according to it's type
-movevideo(){
+# Name the file according to it's type
+movemedia(){
 	local SRC="$1"
 	local DEST="$2"
 	if [[ -f "$DEST" ]];then
@@ -208,9 +219,9 @@ movevideo(){
 	fi
 }
 
-playvideo(){
+playmedia(){
 	local VIDFILE="$1"
-	if zenity --title="${APPNAME^}" --question --text="Do you want to view the video?" 2>/dev/null ;then
+	if zenity --title="${APPNAME^}" --question --text="Do you want to play this file?" 2>/dev/null ;then
     	log "Viewing $VIDFILE"
 	   	vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
 	fi
@@ -222,33 +233,65 @@ startrecord()
 		rm -f "${VTMPFILE}"
 	fi
 
-	(
-		for i in $(seq "$TIMER" -1 1) ;do
-			echo "#Recording in $i " 
-			sleep 1
-		done
-	) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording" --pulsate 2>/dev/null
-	
+	if [[ "$RECTYPE" = 'audio' ]] ;then
+		(
+			for i in $(seq "$TIMER" -1 1) ;do
+				echo "#Recording audio in $i " 
+				sleep 1
+			done
+		) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording audio" --pulsate 2>/dev/null
+	else
+		(
+			for i in $(seq "$TIMER" -1 1) ;do
+				echo "#Recording video in $i " 
+				sleep 1
+			done
+		) | zenity --progress --auto-close --title="${APPNAME^}" --text="Recording audio and video" --pulsate 2>/dev/null
+	fi	
+
 	if [[ "$?" -eq '1' ]] ; then
 	   	zenity --warning --title="${APPNAME^}" --text="Recording Canceled" 2>/dev/null
        	return 1
 	else
 		RECORDING='true'
-		log "Starting new recording"
-		ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
-	    -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
-	    -acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
-	    -c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null &	
-	    FFPID="$!"
-	    while [ "$RECORDING" = 'true' ] ; do
-			sleep 1
-	    done
+		if [[ "$RECTYPE" = 'audio' ]] ;then
+			log "Starting new audio recording"
+			ffmpeg -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
+	    	-acodec "$ACODEC"  "${VTMPFILE}" &>/dev/null &	
+	    	FFPID="$!"
+	    	while [ "$RECORDING" = 'true' ] ; do
+				sleep 1
+	    	done
+		elif [[ "$RECTYPE" = 'auvid' ]] ;then
+			log "Starting new audio/video recording"
+			ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
+	    	-thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
+	    	-acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
+	    	-c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null &	
+	    	FFPID="$!"
+	    	while [ "$RECORDING" = 'true' ] ; do
+				sleep 1
+	    	done
+		fi
 	fi
 }
 
 setup
 
-if ! startrecord ; then
-	log "Warning: Unable to start recording"
+while getopts ":av" opt; do
+	case $opt in
+    	a) RECTYPE='audio' ;;
+        v) RECTYPE='auvid' ;;
+    esac
+done
+shift $((OPTIND-1))
+
+
+if ! startrecord  ; then
+	log "Warning: Unable to start audio recording"
 	exit 1
 fi
+
+
+
+

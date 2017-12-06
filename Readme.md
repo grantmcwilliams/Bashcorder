@@ -4,13 +4,14 @@ Bashcorder is a tool that uses bash, ffmpeg and zenity to provide screen cap rec
 The workflow is very simple. 
 1. To start recording press configurable keyboard shortcut and countdown appears
 2. To end recording press a second configurable keyboard shortcut
-3. The Save file dialog will appear - choose the location to save the video too
-4. If the Save dialog is canceled the video is deleted
+3. The Save file dialog will appear - choose the location to save the audio/video too
+4. If the Save dialog is canceled the audo/video is deleted
 5. If the Chosen file in the save dialog exists it will ask if this is a Pickup or a Retake
 6. It names the file accordingly
 
 ## Features
 * Record to ram or disk
+* Record audio or audio/video combined
 * Configurable ffmpeg recording settings - lossless x.264 is the default
 * Configurable ffmpeg re-encode settings - compresses lossless as defined by the user
 * Snapshots host OS using LVM
