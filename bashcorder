@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 cleanup()
 {
 	if pgrep ffmpeg &> /dev/null ;then
@@ -15,17 +17,29 @@ cleanup()
 	fi
 	exit
 }
+
 trap 'cleanup' SIGINT SIGTERM
+
+while getopts ":c:av" opt; do
+    case $opt in
+    	a) RECTYPE='audio' ;;
+        v) RECTYPE='auvid' ;;
+        c) CONFFILE="$OPTARG" ;;
+    esac
+done
+shift $((OPTIND-1))
 
 # Locations
 APPNAME=${0##*/}
-CONFDIR="${HOME}/.bashcorder"		
-CONFFILE="${CONFDIR}/settings.conf"	
+CONFDIR="${HOME}/.bashcorder"
+if [[ -z "$CONFFILE" ]] ;then		
+	CONFFILE="${CONFDIR}/settings.conf"
+fi	
 LOGFILE="${CONFDIR}/${APPNAME}.log"
 DEPLIST="vlc ffmpeg zenity xrandr flock"  
 VDIR="${HOME}/Videos"		  
 
-# Do not edit - to override edit ${CONFDIR}/settings.conf"
+# Do not edit - to override edit ${CONFDIR}/settings.conf or provide a conf file as an argument"
 TIMER='5'
 QUEUE='1024'                    	        
 ACHANNELS='2'                   	
@@ -46,7 +60,9 @@ VQUAL='0'
 VFQUAL='0'                 
 VKEYFRAMES='90'           
 VPIXFORMAT='yuv420p'
-RECTYPE='auvid' 
+if [[ -z "$RECTYPE" ]]; then
+	RECTYPE='auvid' 
+fi
 
 # Ensure only one copy runs at a time
 
@@ -57,11 +73,8 @@ unlock()			{ flock -u $LOCKFD; }
 no_more_locking() 	{ flock -u $LOCKFD; flock -xn $LOCKFD && rm -r "$LOCKFILE"; }
 prepare_locking()	{ eval "exec $LOCKFD>\"$LOCKFILE\""; trap no_more_locking EXIT;}
 
-
-
 prepare_locking 
 exlock || exit 1
-
 
 log()
 {
@@ -94,14 +107,14 @@ setup()
 		VRES=$(xrandr | awk '/\*/{print $1}')
 	fi
 	
-	VTMPFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
+	VTMPFILE="${VDIR}/${APPNAME}.${FILETYPE}"
 	if [[ "$RAMREC" = 'true' ]] ;then
 		if mount | grep -q '/dev/shm' ;then 
 			if [[ ! -d "/dev/shm/${APPNAME}" ]] ;then
 				mkdir -p "/dev/shm/${APPNAME}"
 			fi
 			VDIR="/dev/shm/${APPNAME}"
-			VTMPFILE="${VDIR}/${APPNAME}.${VIDTYPE}"
+			VTMPFILE="${VDIR}/${APPNAME}.${FILETYPE}"
 		else
 			log "/dev/shm not active - using $VDIR"
 		fi
@@ -257,9 +270,12 @@ startrecord()
 		if [[ "$RECTYPE" = 'audio' ]] ;then
 			log "Starting new audio recording"
 			ffmpeg -thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
-	    	-acodec "$ACODEC"  "${VTMPFILE}" &>/dev/null &	
+	    	-acodec "$ACODEC" "${VTMPFILE}" &>/dev/null & 
 	    	FFPID="$!"
 	    	while [ "$RECORDING" = 'true' ] ; do
+				if ! kill -0 "$FFPID" ;then
+					return 1
+				fi
 				sleep 1
 	    	done
 		elif [[ "$RECTYPE" = 'auvid' ]] ;then
@@ -267,9 +283,12 @@ startrecord()
 			ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
 	    	-thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
 	    	-acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
-	    	-c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null &	
+	    	-c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null & 
 	    	FFPID="$!"
 	    	while [ "$RECORDING" = 'true' ] ; do
+				if ! kill -0 "$FFPID" ;then
+					return 1
+				fi
 				sleep 1
 	    	done
 		fi
@@ -278,17 +297,15 @@ startrecord()
 
 setup
 
-while getopts ":av" opt; do
-	case $opt in
-    	a) RECTYPE='audio' ;;
-        v) RECTYPE='auvid' ;;
-    esac
-done
-shift $((OPTIND-1))
+echo $VTMPFILE > /tmp/vtmpfile.txt
+echo $CONFFILE >> /tmp/vtmpfile.txt
 
 
 if ! startrecord  ; then
-	log "Warning: Unable to start audio recording"
+	case $RECTYPE in
+		audio) log "Warning: Unable to start audio recording" ;;
+		auvid) log "Warning: Unable to start video recording" ;;
+	esac
 	exit 1
 fi
 
