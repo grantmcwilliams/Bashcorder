@@ -73,6 +73,7 @@ encodevideo()
     fi
 	touch "${TMPDIR}/progress.txt"
     ffmpeg -i "$VIDFILE" -c:v "$VFCODEC" -preset "$VFPRESET" -crf "$VFQUAL"  -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" -acodec copy -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" -vstats_file "${TMPDIR}/progress.txt" "${TMPDIR}/${VIDNAME%.*}-tmp.avi" &> "${TMPDIR}/ffmpeg.txt" &
+
     FFRC="$?"
 
 	if [[ ! "$FFRC" -eq '0' ]] ;then 

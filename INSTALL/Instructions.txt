@@ -8,7 +8,7 @@ Append rc.local to the /etc/rc.d/rc.local file
 Rename this directory so it's hidden and doesn't show up in an ls
 Add this directory to the system $PATH for both the user and root
 Assign a keyboard shortcut in Gnome to start bashcorder etc. $HOME/bashcorder/bashcorder
-Assign a keyboard shortcut in Gnome to send a USR1 signal etc. killall -USR1 to bashcorder
+Assign a keyboard shortcut in Gnome to send a USR1 signal etc. killall -USR1 bashcorder
 Once all base OS configuration is done run updatesnap
 
 To Record:

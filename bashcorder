@@ -41,25 +41,6 @@ VDIR="${HOME}/Videos"
 
 # Do not edit - to override edit ${CONFDIR}/settings.conf or provide a conf file as an argument"
 TIMER='5'
-QUEUE='1024'                    	        
-ACHANNELS='2'                   	
-ARATE='48000'                   	
-ACODEC='pcm_s16le'             	 	 
-ADEV='sysdefault:CARD=USBPre2'  	
-ATYPE='alsa'                    
-VFPS='15'                       	
-VRES='auto'             			
-VSCREEN=':0.0'                 
-VCODEC='libx264'                	
-VFCODEC='libx264'					
-VTYPE='x11grab'                
-VPRESET='ultrafast'             	 
-VFPRESET='veryslow'             	 
-VTUNE='stillimage'
-VQUAL='0'                       	
-VFQUAL='0'                 
-VKEYFRAMES='90'           
-VPIXFORMAT='yuv420p'
 if [[ -z "$RECTYPE" ]]; then
 	RECTYPE='auvid' 
 fi
@@ -103,8 +84,8 @@ setup()
 		source "$CONFFILE"
 	fi
 
-	if [[ "$VRES" = 'auto' ]] ;then   
-		VRES=$(xrandr | awk '/\*/{print $1}')
+	if [[ "$VRES" = 'auto' ]] ;then  
+		VRES=$(xdpyinfo | grep "dimensions" | awk '{print $2}') 
 	fi
 	
 	VTMPFILE="${VDIR}/${APPNAME}.${FILETYPE}"
@@ -142,7 +123,7 @@ savefile()
         	-1) echo "An unexpected error has occurred."; return 1;;
 		esac
 	elif [[ "$RECTYPE" = 'auvid' ]] ;then 
-		SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='AVI files (*.avi) | *.avi' --file-filter='All Files | *' 2>/dev/null)
+		SAVENAME=$(zenity --file-selection --filename="$PREVDIR" --save	--title="Save as" --file-filter='MOV files (*.mov) | *.mov' --file-filter='AVI files (*.avi) | *.avi' --file-filter='All Files | *' 2>/dev/null)
 		case $? in
         	-1) echo "An unexpected error has occurred."; return 1;;
 		esac
@@ -188,7 +169,7 @@ movemedia(){
 	if [[ -f "$DEST" ]];then
 		zenity --question --title="${APPNAME^}" --text "File exists - overwrite?" --ok-label="Yes" 
 		--cancel-label="No" 2> /dev/null
-		if [[ "$?" -eq '1' ]] ;then
+		if [[ "$?" -eq '127' ]] ;then
 			zenity --question --title="${APPNAME^}" --text "Is this a pickup or retake" --ok-label="Pickup" \ 
 			--cancel-label="Retake" 2> /dev/null
 			case $? in
@@ -236,7 +217,8 @@ playmedia(){
 	local VIDFILE="$1"
 	if zenity --title="${APPNAME^}" --question --text="Do you want to play this file?" 2>/dev/null ;then
     	log "Viewing $VIDFILE"
-	   	vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
+		$VIDPLAYER $VIDFILE
+	   	# vlc -q --play-and-exit "$VIDFILE" vlc://quit 2> /dev/null 
 	fi
 }
 
@@ -284,10 +266,10 @@ startrecord()
 		elif [[ "$RECTYPE" = 'auvid' ]] ;then
 			log "Starting new audio/video recording"
 			ffmpeg -y -thread_queue_size "$QUEUE" -f "$VTYPE" -s "$VRES" -r "$VFPS" -i "$VSCREEN" \
-	    	-thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
-	    	-acodec "$ACODEC"  -x264opts "keyint=${VKEYFRAMES}:min-keyint=${VKEYFRAMES}:scenecut=-1" \
-	    	-c:v "$VCODEC" -crf "$VQUAL" -tune "$VTUNE" -r "$VFPS" -vf format="$VPIXFORMAT" -preset:v "$VPRESET" "${VTMPFILE}" &>/dev/null & 
-	    	FFPID="$!"
+	    		-thread_queue_size "$QUEUE" -f "$ATYPE" -i "$ADEV" -ar "$ARATE" -ac "$ACHANNELS" \
+	    		-acodec "$ACODEC" -c:v "${VCODEC}" -r "$VFPS" \
+			-vf format="${VPIXFORMAT}" -profile:v "${VPROFILE}" "${VTMPFILE}" &>/dev/null & 
+	    		FFPID="$!"
 			if [[ -z "$FFPID" ]] ;then
 				return 1
 			fi
