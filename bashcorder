@@ -36,7 +36,7 @@ if [[ -z "$CONFFILE" ]] ;then
 	CONFFILE="${CONFDIR}/settings.conf"
 fi	
 LOGFILE="${CONFDIR}/${APPNAME}.log"
-DEPLIST="vlc ffmpeg zenity xrandr flock"  
+DEPLIST="vlc ffmpeg zenity xdpyinfo flock"  
 VDIR="${HOME}/Videos"		  
 
 # Do not edit - to override edit ${CONFDIR}/settings.conf or provide a conf file as an argument"
